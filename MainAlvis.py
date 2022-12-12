@@ -20,7 +20,7 @@ from collections import deque, defaultdict
 from dotenv import load_dotenv
 import os
 
-
+load_dotenv()
 
 # Logging section
 logger = logging.getLogger('discord')
@@ -325,8 +325,10 @@ class RegComs(commands.Cog):
         await ctx.send(f'Hi {ctx.message.author.mention}, you asked me to remind you about ' + message)
 
 TOKEN = os.getenv("DISCORD_TOKEN") 
+
 description = '''A collection of useful features for use by jodru and his friends.'''
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.1.4 - code cleanup"), description=description)
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.1.5 - New version of Discord.py"), description=description, intents= intents)
 
 @bot.event
 async def on_ready():
@@ -336,6 +338,11 @@ async def on_ready():
     print('------')
 
 
-bot.add_cog(RegComs(bot))
-bot.add_cog(VoiceComs(bot))
-bot.run(TOKEN)
+async def main():
+    async with bot:
+        await bot.add_cog(RegComs(bot)) 
+        await bot.add_cog(VoiceComs(bot))
+        await bot.start(TOKEN)
+
+asyncio.run(main())
+
