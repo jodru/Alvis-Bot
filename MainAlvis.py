@@ -17,10 +17,9 @@ from youtube_dl import YoutubeDL
 import logging
 import ffmpeg
 from collections import deque, defaultdict
-from tinydb import TinyDB, Query
+from dotenv import load_dotenv
+import os
 
-db = TinyDB('db.json')
-Search = Query()
 
 
 # Logging section
@@ -58,13 +57,12 @@ ytdl_format_options = {
 ffmpeg_options = {'options': '-vn','before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
+#This works
 class YTDLSource(discord.PCMVolumeTransformer):
 
     def __init__(self, source, *, data, volume=1):
         super().__init__(source, volume)
-
         self.data = data
-
         self.title = data.get('title')
         self.url = data.get('url')
 
@@ -110,9 +108,7 @@ class MusicPlayer(commands.Cog): #Dedicated music player
         url = nowp[id].url
         player = await YTDLSource.from_url(url, loop=None, stream=True)
         musQueue[id].appendleft(player) # Append player left
-        
-    
-     
+                 
     @classmethod
     def queue_text(self, queueCopy):
             """Returns a block of text describing a given song queue."""
@@ -125,10 +121,8 @@ class MusicPlayer(commands.Cog): #Dedicated music player
                 return "\n".join([x for x in queueCopy])
             
             else:
-                return "The play queue is empty numbnut."
+                return "The play queue is empty."
             
-
-
 class VoiceComs(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -151,7 +145,6 @@ class VoiceComs(commands.Cog):
         """Disconnects from channel."""
         
         await ctx.voice_client.disconnect()
-
 
     @commands.command()
     async def play(self, ctx, *, search): #Using url, either adds link to the queue or sends it directly to MusicPlayer to start playing.
@@ -211,7 +204,7 @@ class VoiceComs(commands.Cog):
         if queueCopy: #If queue is a thing...
             await ctx.send("```" + MusicPlayer.queue_text(queueCopy) + "```")
         else:
-            await ctx.send("Queue is empty ya dipstick")
+            await ctx.send("Queue is empty.")
             
     @commands.command()
     async def queueclear(self, ctx):
@@ -221,7 +214,7 @@ class VoiceComs(commands.Cog):
             await musQueue[ctx.guild.id].clear()
             await ctx.send("The queue has been cleared.")
         else:
-            await ctx.send("Queue is empty ya dipstick")
+            await ctx.send("Queue is empty.")
     
     @commands.command()
     async def loop(self, ctx):
@@ -290,7 +283,7 @@ class VoiceComs(commands.Cog):
         if nowp[id]:
             await ctx.send(f'Now playing: {nowp[id].title}')     
         else:
-            await ctx.send("Nothing playing at the moment. Use !play to queue up a song!")
+            await ctx.send("Nothing playing at the moment.")
         
 class RegComs(commands.Cog):
     def __init__(self, bot):
@@ -330,11 +323,10 @@ class RegComs(commands.Cog):
         await ctx.send("Reminder set in " + str(time) + ". The message is " + message)
         await asyncio.sleep(segundo)
         await ctx.send(f'Hi {ctx.message.author.mention}, you asked me to remind you about ' + message)
-    
 
-TOKEN = '' 
+TOKEN = os.getenv("DISCORD_TOKEN") 
 description = '''A collection of useful features for use by jodru and his friends.'''
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.1.2 - minor patch for ?skip"), description=description)
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.1.4 - code cleanup"), description=description)
 
 @bot.event
 async def on_ready():
@@ -344,9 +336,6 @@ async def on_ready():
     print('------')
 
 
-
-
 bot.add_cog(RegComs(bot))
 bot.add_cog(VoiceComs(bot))
-
 bot.run(TOKEN)
