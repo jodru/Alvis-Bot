@@ -411,6 +411,7 @@ bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.0 - Lo
 
 @bot.event
 async def on_ready():
+    makeDatabase() #initialize database
     print('Logged in as')
     print(bot.user.name)
     print(bot.user.id)
