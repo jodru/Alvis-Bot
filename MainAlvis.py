@@ -12,17 +12,33 @@ from discord.ext import commands, tasks
 import asyncio
 import youtube_dl
 from youtube_dl import YoutubeDL
-# import youtube_search
-# from youtube_search import YoutubeSearch
 import logging
 import ffmpeg
 from collections import deque, defaultdict
 from dotenv import load_dotenv
 import os
 
+import sqlite3
+
+conn = sqlite3.connect('Logs.db', check_same_thread = False)
+
+def makeDatabase():
+    #Init database, enable = 0 logs are disabled, enable = 1 logs are enabled
+    c = conn.cursor()
+    try: 
+        c.execute("""CREATE TABLE RegisteredGuilds (
+                guildID integer UNIQUE,
+                channelID integer,
+                enableDelete integer
+                )""")
+        conn.commit()
+    except:
+        print();
+    c.close()
+
 load_dotenv()
 
-# Logging section
+# Bot logging section
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
@@ -83,31 +99,31 @@ class MusicPlayer(commands.Cog): #Dedicated music player
         self.bot = bot
         
     @classmethod
-    def playmusic(self, vc, queue, id, text):
+    def playmusic(self, vc, queue, idd, text):
         """Plays music."""
         
         def afterEnd(err):
             
-            if loopEnable[id] == True:
-                asyncio.run(MusicPlayer.makeLoopObj(queue, id))
+            if loopEnable[idd] == True:
+                asyncio.run(MusicPlayer.makeLoopObj(queue, idd))
             
-            queueQ = musQueue[id]
+            queueQ = musQueue[idd]
             if queueQ:
-                self.playmusic(vc, queueQ, id, text)   
+                self.playmusic(vc, queueQ, idd, text)   
             else:
-                nowp[id] = None
+                nowp[idd] = None
                 asyncio.run_coroutine_threadsafe(vc.disconnect(), vc.loop)
                 
-        nowp[id] = queue[0]
+        nowp[idd] = queue[0]
         vc.play(queue.popleft(), after=afterEnd) # Pop and play
         # Sends message - now playing
     
     @classmethod
-    async def makeLoopObj(self, queue, id):
+    async def makeLoopObj(self, queue, idd):
         """Resets queue and sends currently playing song back to the beginning of the queue for looping purposes."""
-        url = nowp[id].url
+        url = nowp[idd].url
         player = await YTDLSource.from_url(url, loop=None, stream=True)
-        musQueue[id].appendleft(player) # Append player left
+        musQueue[idd].appendleft(player) # Append player left
                  
     @classmethod
     def queue_text(self, queueCopy):
@@ -278,10 +294,10 @@ class VoiceComs(commands.Cog):
     @commands.command()
     async def np(self, ctx):
         """Shows which song is currently playing"""
-        id = ctx.guild.id
+        idd = ctx.guild.id
         print(nowp)
-        if nowp[id]:
-            await ctx.send(f'Now playing: {nowp[id].title}')     
+        if nowp[idd]:
+            await ctx.send(f'Now playing: {nowp[idd].title}')     
         else:
             await ctx.send("Nothing playing at the moment.")
         
@@ -324,11 +340,74 @@ class RegComs(commands.Cog):
         await asyncio.sleep(segundo)
         await ctx.send(f'Hi {ctx.message.author.mention}, you asked me to remind you about ' + message)
 
+class LogComs(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self._last_member = None
+
+
+    @commands.command()
+    async def register(self, ctx):
+        """Register guild in database. Guild must be registered in order to use log functions."""
+        #check sql database if guild is there, if not add to list. Return registered or already registered.
+        #If not already registered, leave cID cell null and set enabled to false
+        
+        #Insert Guild ID into database if entry does not already exist
+        c = conn.cursor()
+        try:
+            c.execute("INSERT INTO RegisteredGuilds VALUES (?, NULL, 0)", (ctx.guild.id,))
+            conn.commit()
+            await ctx.send("Guild registered.")
+        except:
+            await ctx.send("Guild ID already exists.")
+        c.close()
+        
+    @commands.command()
+    async def setLogChannel(self, ctx, *, channel: discord.TextChannel):
+        """Set the log channel to the id provided."""
+        #Set channel for logs
+        c = conn.cursor()
+        try:
+            c.execute("UPDATE RegisteredGuilds SET channelID = ? WHERE guildID = ?", (channel.id, ctx.guild.id))
+            conn.commit()
+            await ctx.send("Log channel updated.")
+        except:
+            await ctx.send("Error. Did you mention a channel after the command?")
+        c.close()
+    
+    @commands.command()
+    async def enableDeletedMessageLog(self, ctx):
+        """Enable deleted message logging"""
+        
+        #If cID exists, enable or disable log. if cID does not exist, return error and tell them to do better
+        #Enable logs
+        c = conn.cursor()
+        try:
+            c.execute("SELECT enableDelete FROM RegisteredGuilds WHERE guildID = ?", (ctx.guild.id,))
+            toggle = c.fetchone()[0]
+        except:
+            await ctx.send("Guild not found. Please register the guild.")
+        else:
+            c.execute("SELECT channelID FROM RegisteredGuilds WHERE guildID = ?", (ctx.guild.id,))
+            currChannelID = c.fetchone()[0]
+            
+            if currChannelID == None:
+                await ctx.send("Channel ID has not been set. Please set a channel ID first.")    
+            elif toggle == 1:
+                c.execute("UPDATE RegisteredGuilds SET enableDelete = 0 WHERE guildID = ?", (ctx.guild.id,))
+                conn.commit()
+                await ctx.send("Deleted message logs disabled.")
+            else:
+                c.execute("UPDATE RegisteredGuilds SET enableDelete = 1 WHERE guildID = ?", (ctx.guild.id,))
+                conn.commit()
+                await ctx.send("Deleted message logs enabled.")
+        c.close()
+            
 TOKEN = os.getenv("DISCORD_TOKEN") 
 
 description = '''A collection of useful features for use by jodru and his friends.'''
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.1.5 - New version of Discord.py"), description=description, intents= intents)
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.0 - Logging system introduction"), description=description, intents= intents)
 
 @bot.event
 async def on_ready():
@@ -337,9 +416,32 @@ async def on_ready():
     print(bot.user.id)
     print('------')
 
+@bot.event
+async def on_message_delete(message):
+    c = conn.cursor()
+    try:
+        c.execute("SELECT enableDelete FROM RegisteredGuilds WHERE guildID = ?", (message.guild.id,))
+        enable = c.fetchone()[0]
+        c.execute("SELECT channelID FROM RegisteredGuilds WHERE guildID = ?", (message.guild.id,))
+        cID = c.fetchone()[0]
+    except:
+        print()
+    else:
+        if enable == 1:
+            channel = bot.get_channel(cID)
+            embed = discord.Embed(type = "rich",
+                                  title = "",
+                                  description = f'**Message sent by user {message.author.mention} in {message.channel.mention} deleted**', 
+                                  color = message.author.color)
+            embed.set_author(name = message.author.display_name, icon_url = message.author.avatar.url)
+            embed.add_field(name = "",
+                            value = f'{message.content}')
+            await channel.send(embed=embed)
+    c.close()
 
 async def main():
     async with bot:
+        await bot.add_cog(LogComs(bot))
         await bot.add_cog(RegComs(bot)) 
         await bot.add_cog(VoiceComs(bot))
         await bot.start(TOKEN)
