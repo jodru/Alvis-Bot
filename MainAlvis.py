@@ -20,16 +20,23 @@ import os
 
 import sqlite3
 
-conn = sqlite3.connect('Logs.db', check_same_thread = False)
+conn = sqlite3.connect('database.db', check_same_thread = False)
 
 def makeDatabase():
     #Init database, enable = 0 logs are disabled, enable = 1 logs are enabled
+    #As well as birthday tables but that's for a future update
     c = conn.cursor()
     try: 
-        c.execute("""CREATE TABLE RegisteredGuilds (
+        c.execute("""CREATE TABLE registeredGuildsLogs (
                 guildID integer UNIQUE,
                 channelID integer,
-                enableDelete integer
+                enableDelete integer,
+                enableEdit integer
+                )""")
+        conn.commit()
+        c.execute("""CREATE TABLE registeredGuildsBirthday (
+                guildID integer UNIQUE,
+                channelID integer
                 )""")
         conn.commit()
     except:
@@ -348,7 +355,7 @@ class LogComs(commands.Cog):
 
     @commands.command()
     @commands.has_permissions(administrator=True)
-    async def register(self, ctx):
+    async def registerLogs(self, ctx):
         """Register guild in database. Guild must be registered in order to use log functions."""
         #check sql database if guild is there, if not add to list. Return registered or already registered.
         #If not already registered, leave cID cell null and set enabled to false
@@ -356,7 +363,7 @@ class LogComs(commands.Cog):
         #Insert Guild ID into database if entry does not already exist
         c = conn.cursor()
         try:
-            c.execute("INSERT INTO RegisteredGuilds VALUES (?, NULL, 0)", (ctx.guild.id,))
+            c.execute("INSERT INTO registeredGuildsLogs VALUES (?, NULL, 0, 0)", (ctx.guild.id,))
             conn.commit()
             await ctx.send("Guild registered.")
         except:
@@ -370,7 +377,7 @@ class LogComs(commands.Cog):
         #Set channel for logs
         c = conn.cursor()
         try:
-            c.execute("UPDATE RegisteredGuilds SET channelID = ? WHERE guildID = ?", (channel.id, ctx.guild.id))
+            c.execute("UPDATE registeredGuildsLogs SET channelID = ? WHERE guildID = ?", (channel.id, ctx.guild.id))
             conn.commit()
             await ctx.send("Log channel updated.")
         except:
@@ -386,31 +393,61 @@ class LogComs(commands.Cog):
         #Enable logs
         c = conn.cursor()
         try:
-            c.execute("SELECT enableDelete FROM RegisteredGuilds WHERE guildID = ?", (ctx.guild.id,))
+            c.execute("SELECT enableDelete FROM registeredGuildsLogs WHERE guildID = ?", (ctx.guild.id,))
             toggle = c.fetchone()[0]
         except:
             await ctx.send("Guild not found. Please register the guild.")
         else:
-            c.execute("SELECT channelID FROM RegisteredGuilds WHERE guildID = ?", (ctx.guild.id,))
+            c.execute("SELECT channelID FROM registeredGuildsLogs WHERE guildID = ?", (ctx.guild.id,))
             currChannelID = c.fetchone()[0]
             
             if currChannelID == None:
                 await ctx.send("Channel ID has not been set. Please set a channel ID first.")    
             elif toggle == 1:
-                c.execute("UPDATE RegisteredGuilds SET enableDelete = 0 WHERE guildID = ?", (ctx.guild.id,))
+                c.execute("UPDATE registeredGuildsLogs SET enableDelete = 0 WHERE guildID = ?", (ctx.guild.id,))
                 conn.commit()
                 await ctx.send("Deleted message logs disabled.")
             else:
-                c.execute("UPDATE RegisteredGuilds SET enableDelete = 1 WHERE guildID = ?", (ctx.guild.id,))
+                c.execute("UPDATE registeredGuildsLogs SET enableDelete = 1 WHERE guildID = ?", (ctx.guild.id,))
                 conn.commit()
                 await ctx.send("Deleted message logs enabled.")
+        c.close()
+    
+    @commands.command()
+    @commands.has_permissions(administrator=True)  
+    async def enableEditedMessageLog(self, ctx):
+        """Enable deleted message logging"""
+        
+        #If cID exists, enable or disable log. if cID does not exist, return error and tell them to do better
+        #Enable logs
+        c = conn.cursor()
+        print(ctx.guild.id)
+        try:
+            c.execute("SELECT enableEdit FROM registeredGuildsLogs WHERE guildID = ?", (ctx.guild.id,))
+            toggle = c.fetchone()[0]
+        except:
+            await ctx.send("Guild not found. Please register the guild.")
+        else:
+            c.execute("SELECT channelID FROM registeredGuildsLogs WHERE guildID = ?", (ctx.guild.id,))
+            currChannelID = c.fetchone()[0]
+            
+            if currChannelID == None:
+                await ctx.send("Channel ID has not been set. Please set a channel ID first.")    
+            elif toggle == 1:
+                c.execute("UPDATE registeredGuildsLogs SET enableEdit = 0 WHERE guildID = ?", (ctx.guild.id,))
+                conn.commit()
+                await ctx.send("Deleted message logs disabled.")
+            else:
+                c.execute("UPDATE registeredGuildsLogs SET enableEdit = 1 WHERE guildID = ?", (ctx.guild.id,))
+                conn.commit()
+                await ctx.send("Edited message logs enabled.")
         c.close()
             
 TOKEN = os.getenv("DISCORD_TOKEN") 
 
 description = '''A collection of useful features for use by jodru and his friends.'''
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.1 - Permissions changes"), description=description, intents= intents)
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.2 - Edit logs enabled"), description=description, intents= intents)
 
 @bot.event
 async def on_ready():
@@ -424,9 +461,9 @@ async def on_ready():
 async def on_message_delete(message):
     c = conn.cursor()
     try:
-        c.execute("SELECT enableDelete FROM RegisteredGuilds WHERE guildID = ?", (message.guild.id,))
+        c.execute("SELECT enableDelete FROM registeredGuildsLogs WHERE guildID = ?", (message.guild.id,))
         enable = c.fetchone()[0]
-        c.execute("SELECT channelID FROM RegisteredGuilds WHERE guildID = ?", (message.guild.id,))
+        c.execute("SELECT channelID FROM registeredGuildsLogs WHERE guildID = ?", (message.guild.id,))
         cID = c.fetchone()[0]
     except:
         print()
@@ -443,6 +480,34 @@ async def on_message_delete(message):
             await channel.send(embed=embed)
     c.close()
 
+@bot.event
+async def on_message_edit(message_before, message_after):
+    c = conn.cursor()
+    try:
+        c.execute("SELECT enableEdit FROM registeredGuildsLogs WHERE guildID = ?", (message_before.guild.id,))
+        enable = c.fetchone()[0]
+        c.execute("SELECT channelID FROM registeredGuildsLogs WHERE guildID = ?", (message_before.guild.id,))
+        cID = c.fetchone()[0]
+    except:
+        print()
+    else:
+        if enable == 1:
+            channel = bot.get_channel(cID)
+            embed = discord.Embed(type = "rich",
+                                  title = "",
+                                  description = f'**Message sent by user {message_before.author.mention} in {message_before.channel.mention} edited**', 
+                                  color = message_before.author.color)
+            embed.set_author(name = message_before.author.display_name, icon_url = message_before.author.avatar.url)
+            embed.add_field(name = "Before",
+                            value = f'{message_before.content}',
+                            inline=False)
+            
+            embed.add_field(name = "After",
+                            value = f'{message_after.content}',
+                            inline=False)
+            await channel.send(embed=embed)
+    c.close()
+
 async def main():
     async with bot:
         await bot.add_cog(LogComs(bot))
@@ -451,3 +516,4 @@ async def main():
         await bot.start(TOKEN)
 
 asyncio.run(main())
+
