@@ -347,6 +347,7 @@ class LogComs(commands.Cog):
 
 
     @commands.command()
+    @commands.has_permissions(administrator=True)
     async def register(self, ctx):
         """Register guild in database. Guild must be registered in order to use log functions."""
         #check sql database if guild is there, if not add to list. Return registered or already registered.
@@ -363,6 +364,7 @@ class LogComs(commands.Cog):
         c.close()
         
     @commands.command()
+    @commands.has_permissions(administrator=True)
     async def setLogChannel(self, ctx, *, channel: discord.TextChannel):
         """Set the log channel to the id provided."""
         #Set channel for logs
@@ -376,6 +378,7 @@ class LogComs(commands.Cog):
         c.close()
     
     @commands.command()
+    @commands.has_permissions(administrator=True)
     async def enableDeletedMessageLog(self, ctx):
         """Enable deleted message logging"""
         
@@ -407,7 +410,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 description = '''A collection of useful features for use by jodru and his friends.'''
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.0 - Logging system introduction"), description=description, intents= intents)
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.1 - Permissions changes"), description=description, intents= intents)
 
 @bot.event
 async def on_ready():
@@ -448,4 +451,3 @@ async def main():
         await bot.start(TOKEN)
 
 asyncio.run(main())
-
