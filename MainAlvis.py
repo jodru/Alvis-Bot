@@ -7,6 +7,8 @@ I was here at the beginning, and I will proclaim the end.
 '''
 
 import discord
+import datetime
+from datetime import date
 from requests import get
 from discord.ext import commands, tasks
 import asyncio
@@ -17,8 +19,10 @@ import ffmpeg
 from collections import deque, defaultdict
 from dotenv import load_dotenv
 import os
-
 import sqlite3
+
+utc = datetime.timezone.utc
+time = datetime.time(hour=17, minute=0, second=0, tzinfo=utc)
 
 conn = sqlite3.connect('database.db', check_same_thread = False)
 
@@ -56,7 +60,6 @@ logger.addHandler(handler)
 musQueue = defaultdict(deque)
 loopEnable = defaultdict(bool)
 nowp = {}
-logChannel = {}
 
 # YTDL Section
 
@@ -442,12 +445,137 @@ class LogComs(commands.Cog):
                 conn.commit()
                 await ctx.send("Edited message logs enabled.")
         c.close()
+           
+#every birthday command you'll ever need
+class BirthdayComs(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.my_task.start()
+    
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def registerBirthdays(self, ctx):
+        """Register guild. Guild must be registered in order to use birthday functions."""
+                
+        #check to see if table with guildID as name already exists
+        #if so then return guild already exists
+        #if not make the table
+        #should be no reason to deregister a guild
+        
+        guildID = str(ctx.guild.id)
+        c = conn.cursor()
+        try:
+            c.execute("INSERT INTO registeredGuildsBirthday VALUES (?, NULL)", (ctx.guild.id,))
+            conn.commit()
+            c.execute(f"CREATE TABLE \"{guildID}\" (nameID integer UNIQUE, birthmonth integer, birthday integer)") #IF NOT EXISTS
+            conn.commit()
+            await ctx.send("Guild registered.")
+        except:
+            await ctx.send("Guild already registered.")            
+        c.close()
+        
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def setAnnounceChannel(self, ctx, *, channel: discord.TextChannel):
+        """Set the log channel to the id provided."""
+        #Set channel for logs, or really the birthday announcement channel
+        c = conn.cursor()
+        try:
+            c.execute("UPDATE registeredGuildsBirthday SET channelID = ? WHERE guildID = ?", (channel.id, ctx.guild.id))
+            conn.commit()
+            await ctx.send("Announcement channel set.")
+        except:
+            await ctx.send("Error. Did you mention a channel after the command?")
+        c.close()
+        
+        
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def addBirthday(self, ctx, user: discord.User, monthstr, daystr):
+        """Add a user with the id provided."""
+        #set user bday
+        guildID = str(ctx.guild.id)
+        month = int(monthstr)
+        day = int(daystr)
+        userID = user.id
+        if isinstance(month, int) and isinstance(day, int):
+            c = conn.cursor()
+            try:
+                c.execute(f"INSERT INTO \"{guildID}\" (nameID, birthmonth, birthday) VALUES (\"{userID}\",\"{month}\",\"{day}\")")
+                conn.commit()
+                await ctx.send(f"User added with birthday {month}/{day}")
+            except:
+                await ctx.send("Error. The user may have already been added, try running !updateBirthday.")
+            c.close()
+        else:
+            await ctx.send("Error. Did you tag a user and then follow with the month and day?")
+        
+    
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def updateBirthday(self, ctx, user: discord.User, monthstr, daystr):
+        """Update a user's birthday."""
+        #update user bday if it exists
+        guildID = str(ctx.guild.id)
+        month = int(monthstr)
+        day = int(daystr)
+        userID = user.id
+        if isinstance(month, int) or isinstance(day, int):
+            c = conn.cursor()
+            try:
+                c.execute(f"UPDATE \"{guildID}\" SET birthmonth = \"{month}\" WHERE nameID = \"{userID}\"")
+                conn.commit()
+                c.execute(f"UPDATE \"{guildID}\" SET birthday = \"{day}\" WHERE nameID = \"{userID}\"")
+                conn.commit()
+                await ctx.send(f"User updated with birthday {month}/{day}")
+            except:
+                await ctx.send("Error. Not sure what the error was, but there was one.")
+            c.close()
+        else:
+            await ctx.send("Error. Did you tag a user and then follow with the month and day?")
+        
+        c.close()
+            
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def removeUser(self, ctx, *, userIDstr):
+        """Remove user from database."""
+        guildID = str(ctx.guild.id)
+        c = conn.cursor()
+        userID = int(userIDstr)
+        try:
+            c.execute(f"DELETE FROM \"{guildID}\" WHERE nameID = \"{userID}\"")
+            await ctx.send("User removed.")
+            
+        except:
+            await ctx.send("User not found.")
+        c.close()
+            
+    @tasks.loop(time=time)
+    async def my_task(self):
+
+        #runs at 1700 UTC every day and tags everyone if there is a birthday
+        #1pm EST, 10am PST
+        c = conn.cursor()
+        regGuilds = [registered[0] for registered in c.execute("SELECT guildID FROM registeredGuildsBirthday")]
+        for x in regGuilds:
+            currGuildID = x
+            c.execute(f"SELECT * from \"{currGuildID}\"")
+            records = c.fetchall()
+            today = date.today()
+            for row in records:
+                if row[1] == today.month and row[2] == today.day:
+                    c.execute(f"SELECT channelID FROM registeredGuildsBirthday WHERE guildID = \"{currGuildID}\"")
+                    cID = c.fetchone()[0]
+                    channel = bot.get_channel(cID)
+                    await channel.send(f"@everyone Today is <@{row[0]}>'s birthday! Everyone wish them a happy birthday!!")
+       
             
 TOKEN = os.getenv("DISCORD_TOKEN") 
 
 description = '''A collection of useful features for use by jodru and his friends.'''
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.2 - Edit logs enabled"), description=description, intents= intents)
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.3 - Birthday functions live"), description=description, intents= intents)
 
 @bot.event
 async def on_ready():
@@ -513,7 +641,7 @@ async def main():
         await bot.add_cog(LogComs(bot))
         await bot.add_cog(RegComs(bot)) 
         await bot.add_cog(VoiceComs(bot))
+        await bot.add_cog(BirthdayComs(bot))
         await bot.start(TOKEN)
 
 asyncio.run(main())
-
