@@ -20,6 +20,7 @@ from collections import deque, defaultdict
 from dotenv import load_dotenv
 import os
 import sqlite3
+import random
 
 utc = datetime.timezone.utc
 time = datetime.time(hour=17, minute=0, second=0, tzinfo=utc)
@@ -132,7 +133,9 @@ class MusicPlayer(commands.Cog): #Dedicated music player
     async def makeLoopObj(self, queue, idd):
         """Resets queue and sends currently playing song back to the beginning of the queue for looping purposes."""
         url = nowp[idd].url
+        songTitle = str(nowp[idd].title)
         player = await YTDLSource.from_url(url, loop=None, stream=True)
+        player.title = songTitle
         musQueue[idd].appendleft(player) # Append player left
                  
     @classmethod
@@ -207,7 +210,7 @@ class VoiceComs(commands.Cog):
         musQueue[ctx.guild.id].append(player) # Set player obj for sending to MusicPlayer       
             
         if not vc.is_playing(): 
-            await ctx.send(f'Now playing: {player.title}') 
+            await ctx.send(f'Now playing: {player.title}')
             MusicPlayer.playmusic(vc, musQueue[ctx.guild.id], ctx.guild.id, tc)     
                 
         elif vc.is_playing():
@@ -305,11 +308,57 @@ class VoiceComs(commands.Cog):
     async def np(self, ctx):
         """Shows which song is currently playing"""
         idd = ctx.guild.id
-        print(nowp)
+
         if nowp[idd]:
             await ctx.send(f'Now playing: {nowp[idd].title}')     
         else:
             await ctx.send("Nothing playing at the moment.")
+            
+            
+    @commands.command()
+    async def shuffle(self, ctx):
+        """Shuffles the play queue."""
+        
+        idd = ctx.guild.id
+        
+        if musQueue[idd]: #If queue is a thing...
+            queueUrl = list()
+            queueTitle = list()
+            
+            for x in musQueue[idd]:
+                queueUrl.append(x.url)
+                queueTitle.append(str(x.title))
+
+            musQueue[idd].clear()
+            queueLength = len(queueUrl)
+            
+            #pick random # from numbers 0-list.length           
+            #take url and title and make yt obj and append the title because that's apparently an issue and throw it in bot dict queue
+            #remove item from list and redo until list is empty
+            while queueLength > 0:
+
+                randomIndex = random.randint(0, queueLength-1)
+                url = queueUrl[randomIndex]
+                del queueUrl[randomIndex]
+                
+                player = await YTDLSource.from_url(url, loop=None, stream=True)
+                player.title = queueTitle[randomIndex]
+                
+                del queueTitle[randomIndex]
+                
+                musQueue[idd].appendleft(player)
+                queueLength = len(queueUrl)
+            
+            await ctx.send("Queue shuffled.")
+        else:
+            await ctx.send("Queue is empty.")
+        
+
+
+            
+            
+            
+            
         
 class RegComs(commands.Cog):
     def __init__(self, bot):
@@ -571,11 +620,13 @@ class BirthdayComs(commands.Cog):
                     await channel.send(f"@everyone Today is <@{row[0]}>'s birthday! Everyone wish them a happy birthday!!")
        
             
-TOKEN = os.getenv("DISCORD_TOKEN") 
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+
 
 description = '''A collection of useful features for use by jodru and his friends.'''
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.3 - Birthday functions live"), description=description, intents= intents)
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.4a - Queue modification update - shuffle command, loop bug fixed"), description=description, intents= intents)
 
 @bot.event
 async def on_ready():
