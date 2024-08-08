@@ -8,7 +8,7 @@ The following packages for python need to be installed:
 * discord.py[voice]
 * python-dotenv
 * ffmpeg-python
-* youtube_dl
+* yt-dlp
 * pynacl
 
 Additionally, you will need an .env file with the following key and its respective value:

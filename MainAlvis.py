@@ -12,8 +12,8 @@ from datetime import date
 from requests import get
 from discord.ext import commands, tasks
 import asyncio
-import youtube_dl
-from youtube_dl import YoutubeDL
+import yt_dlp
+from yt_dlp import YoutubeDL
 import logging
 import ffmpeg
 from collections import deque, defaultdict
@@ -65,7 +65,7 @@ nowp = {}
 # YTDL Section
 
 
-youtube_dl.utils.bug_reports_message = lambda: ''
+yt_dlp.utils.bug_reports_message = lambda: ''
 
 ytdl_format_options = {
     'format': 'bestaudio/best',
@@ -82,7 +82,7 @@ ytdl_format_options = {
 }
 
 ffmpeg_options = {'options': '-vn','before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'}
-ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
 #This works
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -626,7 +626,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 description = '''A collection of useful features for use by jodru and his friends.'''
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.4a - Queue modification update - shuffle command, loop bug fixed"), description=description, intents= intents)
+bot = commands.Bot(command_prefix='?', activity = discord.Game(name="v1.2.4b - youtubedl bug fixed"), description=description, intents= intents)
 
 @bot.event
 async def on_ready():
